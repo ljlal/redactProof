@@ -3,6 +3,8 @@ import hashlib
 import pymupdf
 import streamlit as st
 from redactor import count_matches, redact_pdf
+from detector import detect_sensitive_info
+
 
 st.set_page_config(
     page_title="RedactProof",
@@ -23,6 +25,7 @@ def make_demo_pdf():
         page.insert_text((72, 110), "Name: Johnny Lee")
         page.insert_text((72, 135), "Email: johnny.lee@example.com")
         page.insert_text((72, 160), "Backup: johnny.lee@example.com")
+        page.insert_text((72, 185), "Phone: +64 21 123 4567")
 
         return doc.tobytes()
 
@@ -89,7 +92,7 @@ if uploaded is not None and target:
             ):
                 output = redact_pdf(raw, target)
                 st.session_state["result"] = output
-    
+
         if st.session_state.get("result"):
 
             st.success(
@@ -106,4 +109,87 @@ if uploaded is not None and target:
 
     except Exception as error:
         st.error(f"Unable to process PDF: {error}")
+
+# Part 6: Automatic detection
+st.divider()
+st.subheader("Automatic Sensitive Information Detection")
+
+if uploaded is not None:
+
+    raw = uploaded.getvalue()
+
+    if len(raw) > 10 * 1024 * 1024:
+        st.error("This prototype supports files up to 10 MB only.")
+        st.stop()
+
+    try:
+        findings = detect_sensitive_info(raw)
+
+        if not findings:
+            st.info("No supported sensitive patterns detected.")
+
+        else:
+            labels = {
+                item["value"]: (
+                    f'{item["kind"]}: {item["value"]} '
+                    f'({item["count"]} occurrences)'
+                )
+                for item in findings
+            }
+
+            selected = st.multiselect(
+                "Select information to redact",
+                options=list(labels.keys()),
+                format_func=lambda value: labels[value]
+            )
+
+            # Prevent downloading results from an old selection
+            selection_key = (
+                hashlib.sha256(raw).hexdigest(),
+                tuple(sorted(selected))
+            )
+
+            if st.session_state.get("auto_result_key") != selection_key:
+                st.session_state.pop("auto_result", None)
+
+            if st.button(
+                "Redact Selected Information",
+                disabled=not selected
+            ):
+                st.session_state.pop("auto_result", None)
+
+                try:
+                    output = raw
+
+                    for value in selected:
+                        output = redact_pdf(output, value)
+
+                    st.session_state["auto_result"] = output
+                    st.session_state["auto_result_key"] = selection_key
+
+                except Exception as error:
+                    st.error(f"Redaction failed: {error}")
+
+            if (
+                st.session_state.get("auto_result_key") == selection_key
+                and st.session_state.get("auto_result") is not None
+            ):
+                st.success(
+                    "Selected text passed searchable-text verification."
+                )
+
+                st.warning(
+                    "Review the exported PDF visually. This is not "
+                    "a complete privacy or metadata audit."
+                )
+
+                st.download_button(
+                    "Download Automatically Redacted PDF",
+                    data=st.session_state["auto_result"],
+                    file_name="auto_redacted.pdf",
+                    mime="application/pdf"
+                )
+
+    except Exception as error:
+        st.error(f"Automatic detection failed: {error}")
 
