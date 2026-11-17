@@ -4,11 +4,12 @@ import pymupdf
 import streamlit as st
 from redactor import count_matches, redact_pdf
 from detector import detect_sensitive_info
-
+from report import render_pdf_page, build_verification_report
 
 st.set_page_config(
     page_title="RedactProof",
-    page_icon="🔒"
+    page_icon="🔒",
+    layout="wide"
 )
 
 st.title("RedactProof")
@@ -29,6 +30,87 @@ def make_demo_pdf():
 
         return doc.tobytes()
 
+def show_verification_result(original, output, targets, key):
+    """Display the report and before/after previews."""
+
+    report = build_verification_report(
+        original, output, targets
+    )
+
+    st.subheader("Verification Report")
+
+    all_passed = all(
+        item["text_passed"]
+        for item in report["results"]
+    )
+
+    for item in report["results"]:
+        st.write(f"**Target:** {item['target']}")
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Before", item["before"])
+        col2.metric("After", item["after"])
+        col3.metric(
+            "Page-text check",
+            "PASS" if item["text_passed"] else "FAIL"
+        )
+
+        if item["metadata_match"]:
+            st.error(
+                "The selected text was also found in PDF metadata. "
+                "This version does not remove it."
+            )
+
+    if all_passed:
+        st.success("Selected searchable page-text checks passed.")
+    else:
+        st.error("One or more page-text checks failed.")
+
+    # Warnings for content not covered by the text check
+    if report["textless_pages"]:
+        st.warning(
+            "Pages without extractable text: "
+            f"{report['textless_pages']}. "
+            "These may be scans or empty pages."
+        )
+
+    if report["image_pages"]:
+        st.warning(
+            "Images detected on pages: "
+            f"{report['image_pages']}. "
+            "Image content has not been checked with OCR."
+        )
+
+    if report["attachment_count"]:
+        st.warning(
+            f"{report['attachment_count']} embedded file(s) detected. "
+            "Attachments were not inspected or removed."
+        )
+
+    st.info(
+        "This is a limited verification, not a certificate "
+        "that the entire PDF is free of sensitive information."
+    )
+
+    st.subheader("Before & After Preview")
+
+    page_number = st.selectbox(
+        "Choose a page",
+        options=list(range(report["page_count"])),
+        format_func=lambda index: f"Page {index + 1}",
+        key=f"preview_page_{key}"
+    )
+
+    left, right = st.columns(2)
+
+    with left:
+        st.write("**Original PDF**")
+        st.image(render_pdf_page(original, page_number))
+
+    with right:
+        st.write("**Redacted PDF**")
+        st.image(render_pdf_page(output, page_number))
 
 st.download_button(
     "Download fictional test PDF",
@@ -95,9 +177,11 @@ if uploaded is not None and target:
 
         if st.session_state.get("result"):
 
-            st.success(
-                "Verification passed: no matching searchable "
-                "page text was found in the exported PDF."
+            show_verification_result(
+                raw,
+                st.session_state["result"],
+                [target],
+                "manual"
             )
 
             st.download_button(
@@ -174,13 +258,11 @@ if uploaded is not None:
                 st.session_state.get("auto_result_key") == selection_key
                 and st.session_state.get("auto_result") is not None
             ):
-                st.success(
-                    "Selected text passed searchable-text verification."
-                )
-
-                st.warning(
-                    "Review the exported PDF visually. This is not "
-                    "a complete privacy or metadata audit."
+                show_verification_result(
+                    raw,
+                    st.session_state["auto_result"],
+                    selected,
+                    "automatic"
                 )
 
                 st.download_button(
