@@ -2,6 +2,7 @@
 import hashlib
 import pymupdf
 import streamlit as st
+from redactor import count_matches, redact_pdf
 
 st.set_page_config(
     page_title="RedactProof",
@@ -64,74 +65,31 @@ if uploaded is not None and target:
         st.session_state.pop("result", None)
         st.session_state.pop("confirm", None)
 
+    
     try:
-        with pymupdf.open(stream=raw, filetype="pdf") as doc:
+        count = count_matches(raw, target)
 
-            if doc.needs_pass:
-                st.error("Password-protected PDFs are not supported.")
-                st.stop()
+        st.info(f"Found {count} matching text regions in the PDF.")
 
-            count = sum(
-                len(page.search_for(target))
-                for page in doc
+        if count == 0:
+            st.warning(
+                "No match found. Scanned pages may not have "
+                "searchable text."
             )
 
-            st.info(f"Found {count} matching text regions in the PDF.")
+        else:
+            confirmed = st.checkbox(
+                f"I reviewed and approve removing all {count} matches.",
+                key="confirm"
+            )
 
-            if count == 0:
-                st.warning(
-                    "No match found. Scanned pages may not have "
-                    "searchable text."
-                )
-
-            else:
-                confirmed = st.checkbox(
-                    f"I reviewed and approve removing all {count} matches.",
-                    key="confirm"
-                )
-
-                if st.button(
-                    "3. Redact and verify",
-                    disabled=not confirmed
-                ):
-
-                    # Remove all matching text regions
-                    for page in doc:
-                        matches = page.search_for(target)
-
-                        for rect in matches:
-                            page.add_redact_annot(
-                                rect,
-                                fill=(0, 0, 0)
-                            )
-
-                        if matches:
-                            page.apply_redactions()
-
-                    output = doc.tobytes(
-                        garbage=4,
-                        deflate=True
-                    )
-
-                    # Part 4: Verify the exported PDF
-                    with pymupdf.open(
-                        stream=output,
-                        filetype="pdf"
-                    ) as checked:
-
-                        remaining = sum(
-                            len(page.search_for(target))
-                            for page in checked
-                        )
-
-                    if remaining == 0:
-                        st.session_state["result"] = output
-                    else:
-                        st.error(
-                            "Verification failed. No download provided."
-                        )
-
-        # Part 5: Download the result
+            if st.button(
+                "3. Redact and verify",
+                disabled=not confirmed
+            ):
+                output = redact_pdf(raw, target)
+                st.session_state["result"] = output
+    
         if st.session_state.get("result"):
 
             st.success(
@@ -148,3 +106,4 @@ if uploaded is not None and target:
 
     except Exception as error:
         st.error(f"Unable to process PDF: {error}")
+
