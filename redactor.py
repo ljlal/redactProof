@@ -3,7 +3,7 @@ import pymupdf
 
 
 def count_matches(pdf_data: bytes, target: str) -> int:
-    """Count matching text regions in a PDF."""
+    """Count matching searchable text regions."""
 
     target = target.strip()
 
@@ -11,21 +11,14 @@ def count_matches(pdf_data: bytes, target: str) -> int:
         return 0
 
     with pymupdf.open(stream=pdf_data, filetype="pdf") as doc:
-
         if doc.needs_pass:
             raise ValueError("Password-protected PDFs are not supported.")
 
-        count = 0
-
-        for page in doc:
-            matches = page.search_for(target)
-            count += len(matches)
-
-        return count
+        return sum(len(page.search_for(target)) for page in doc)
 
 
 def verify_redaction(pdf_data: bytes, target: str) -> bool:
-    """Check whether target text is still searchable."""
+    """Check whether selected text remains searchable."""
 
     if not target.strip():
         raise ValueError("Target text cannot be empty.")
@@ -33,12 +26,16 @@ def verify_redaction(pdf_data: bytes, target: str) -> bool:
     return count_matches(pdf_data, target) == 0
 
 
-def redact_pdf(pdf_data: bytes, target: str) -> bytes:
-    """Remove matching page text and verify the output."""
+def redact_pdf_many(pdf_data: bytes, targets: list[str]) -> bytes:
+    """Redact multiple targets in one PDF processing operation."""
 
-    target = target.strip()
+    targets = list(dict.fromkeys(
+        value.strip()
+        for value in targets
+        if value and value.strip()
+    ))
 
-    if not target:
+    if not targets:
         raise ValueError("Target text cannot be empty.")
 
     with pymupdf.open(stream=pdf_data, filetype="pdf") as doc:
@@ -46,30 +43,56 @@ def redact_pdf(pdf_data: bytes, target: str) -> bytes:
         if doc.needs_pass:
             raise ValueError("Password-protected PDFs are not supported.")
 
-        total_matches = 0
+        #check all targets before editing
+        counts = {value: 0 for value in targets}
 
         for page in doc:
-            matches = page.search_for(target)
-            total_matches += len(matches)
+            for value in targets:
+                counts[value] += len(page.search_for(value))
 
-            for rect in matches:
-                page.add_redact_annot(
-                    rect,
-                    fill=(0, 0, 0)
-                )
+        missing = [
+            value for value, count in counts.items()
+            if count == 0
+        ]
 
-            if matches:
+        if missing:
+            raise ValueError(
+                "No matching text found for one or more targets."
+            )
+
+        #mark every selected target
+        for page in doc:
+            has_redactions = False
+
+            for value in targets:
+                matches = page.search_for(value)
+
+                for rect in matches:
+                    page.add_redact_annot(
+                        rect,
+                        fill=(0, 0, 0)
+                    )
+                    has_redactions = True
+
+            # apply all marks on this page together
+            if has_redactions:
                 page.apply_redactions()
-
-        if total_matches == 0:
-            raise ValueError("No matching text found.")
 
         output = doc.tobytes(
             garbage=4,
             deflate=True
         )
 
-    if not verify_redaction(output, target):
-        raise ValueError("Redaction verification failed.")
+    #Verify every selected target
+    for value in targets:
+        if not verify_redaction(output, value):
+            raise ValueError(
+                "Redaction verification failed."
+            )
 
     return output
+
+def redact_pdf(pdf_data: bytes, target: str) -> bytes:
+    """Single-target interface, kept for backwards compatibility."""
+
+    return redact_pdf_many(pdf_data, [target])

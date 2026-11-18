@@ -2,7 +2,7 @@
 import hashlib
 import pymupdf
 import streamlit as st
-from redactor import count_matches, redact_pdf
+from redactor import count_matches, redact_pdf, redact_pdf_many
 from detector import detect_sensitive_info
 from report import render_pdf_page, build_verification_report
 
@@ -62,10 +62,25 @@ def show_verification_result(original, output, targets, key):
                 "This version does not remove it."
             )
 
+    
     if all_passed:
-        st.success("Selected searchable page-text checks passed.")
+        st.success(
+            "LIMITED PASS: All selected targets are no longer "
+            "searchable in the exported PDF page text."
+        )
     else:
-        st.error("One or more page-text checks failed.")
+        st.error(
+            "FAILED: At least one selected target did not "
+            "pass page-text verification."
+        )
+
+    st.caption(
+        "Verification scope: selected searchable page text only. "
+        "This result does not guarantee complete removal of "
+        "sensitive information from images, annotations, "
+        "metadata, forms, or attachments."
+    )
+
 
     # Warnings for content not covered by the text check
     if report["textless_pages"]:
@@ -226,8 +241,23 @@ if uploaded is not None:
                 options=list(labels.keys()),
                 format_func=lambda value: labels[value]
             )
+            #check whether the PDF search engine can locate 
+            #each selected value before allowing redaction
+            unlocated = [
+                value
+                for value in selected
+                if count_matches(raw, value) == 0
+            ]
 
-            # Prevent downloading results from an old selection
+            if unlocated:
+                st.error(
+                    "Some selected information was detected but " \
+                    "cannot be located for redaction." \
+                    "Deselect those items or review the PDF." \
+                    "OCR is not supported in the version."
+                )
+
+            #prevent downloading results from an old selection
             selection_key = (
                 hashlib.sha256(raw).hexdigest(),
                 tuple(sorted(selected))
@@ -238,15 +268,12 @@ if uploaded is not None:
 
             if st.button(
                 "Redact Selected Information",
-                disabled=not selected
+                disabled=not selected or bool(unlocated)
             ):
                 st.session_state.pop("auto_result", None)
 
                 try:
-                    output = raw
-
-                    for value in selected:
-                        output = redact_pdf(output, value)
+                    output = redact_pdf_many(raw, selected)
 
                     st.session_state["auto_result"] = output
                     st.session_state["auto_result_key"] = selection_key
