@@ -4,7 +4,8 @@ import pymupdf
 import streamlit as st
 from redactor import count_matches, redact_pdf, redact_pdf_many
 from detector import detect_sensitive_info
-from report import render_pdf_page, build_verification_report
+from report import render_pdf_page, build_verification_report, get_verification_status
+from demo import make_unsafe_masked_pdf
 
 st.set_page_config(
     page_title="RedactProof",
@@ -39,10 +40,7 @@ def show_verification_result(original, output, targets, key):
 
     st.subheader("Verification Report")
 
-    all_passed = all(
-        item["text_passed"]
-        for item in report["results"]
-    )
+    status = get_verification_status(report)
 
     for item in report["results"]:
         st.write(f"**Target:** {item['target']}")
@@ -62,17 +60,24 @@ def show_verification_result(original, output, targets, key):
                 "This version does not remove it."
             )
 
-    
-    if all_passed:
+    if status == "LIMITED PASS":
         st.success(
-            "LIMITED PASS: All selected targets are no longer "
+            "LIMITED PASS: Selected text is no longer "
             "searchable in the exported PDF page text."
         )
+
+    elif status == "REVIEW REQUIRED":
+        st.warning(
+            "REVIEW REQUIRED: Selected page-text checks passed, "
+            "but additional content needs manual review."
+        )
+
     else:
         st.error(
-            "FAILED: At least one selected target did not "
-            "pass page-text verification."
+            "FAILED: One or more selected targets did not "
+            "pass the page-text verification."
         )
+
 
     st.caption(
         "Verification scope: selected searchable page text only. "
@@ -132,6 +137,20 @@ st.download_button(
     data=make_demo_pdf(),
     file_name="demo.pdf",
     mime="application/pdf"
+)
+
+# Unsafe masking demo PDF
+st.download_button(
+    "Download unsafe masking demo PDF",
+    data=make_unsafe_masked_pdf(),
+    file_name="unsafe_masked_demo.pdf",
+    mime="application/pdf"
+)
+
+st.caption(
+    "Security demo: The black rectangle only covers the text "
+    "visually. Upload this PDF and search for Johnny Lee "
+    "to see why visual masking is not sufficient."
 )
 
 

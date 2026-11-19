@@ -5,7 +5,8 @@ import pytest
 from redactor import redact_pdf
 from report import (
     render_pdf_page,
-    build_verification_report
+    build_verification_report,
+    get_verification_status
 )
 
 
@@ -70,5 +71,26 @@ def test_metadata_warning():
     report = build_verification_report(
         original, output, ["Johnny Lee"]
     )
-
+    
     assert report["results"][0]["metadata_match"] is True
+    assert get_verification_status(report) == "REVIEW REQUIRED"
+    
+def test_limited_pass_status():
+    original = make_test_pdf()
+    output = redact_pdf(original, "Johnny Lee")
+
+    report = build_verification_report(
+        original, output, ["Johnny Lee"]
+    )
+
+    assert get_verification_status(report) == "LIMITED PASS"
+
+
+def test_failed_status():
+    original = make_test_pdf()
+
+    report = build_verification_report(
+        original, original, ["Johnny Lee"]
+    )
+
+    assert get_verification_status(report) == "FAILED"

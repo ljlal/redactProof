@@ -89,3 +89,29 @@ def build_verification_report(
         "image_pages": image_pages,
         "attachment_count": attachment_count
     }
+
+
+def get_verification_status(report: dict) -> str:
+    """Classify the limited verification result."""
+
+    results = report["results"]
+    # At least one selected target failed verification
+    if not results or not all(
+        item["text_passed"] for item in results
+    ):
+        return "FAILED"
+    metadata_risk = any(
+        item["metadata_match"] for item in results
+    )
+
+    review_required = (
+        metadata_risk
+        or bool(report["image_pages"])
+        or bool(report["textless_pages"])
+        or report["attachment_count"] > 0
+    )
+
+    if review_required:
+        return "REVIEW REQUIRED"
+
+    return "LIMITED PASS"
