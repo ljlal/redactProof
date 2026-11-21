@@ -18,7 +18,7 @@ The project focuses on four principles:
 - **Redaction:** Apply PDF redaction operations.
 - **Verification:** Check the result and communicate limitations.
 
-## Features (v0.4)
+## Features (v0.5)
 
 ### 1. PDF Redaction
 
@@ -58,6 +58,18 @@ RedactProof uses pytest to test:
 - PDF preview generation
 - Verification reports
 - Selected metadata and failure scenarios
+
+### 5. Automated Testing
+
+- Automated tests using pytest.
+
+- Redaction and sensitive information detection tests.
+
+- Invalid input and error handling tests.
+
+- Verification report and PDF preview tests.
+
+- Unsafe masking demonstration tests.
 
 ## Tech Stack
 
@@ -127,21 +139,18 @@ The automated tests cover core processing, detection, verification, and selected
 
 **RedactProof is an experimental prototype, not a complete PDF sanitization or privacy certification solution.**
 
-Known limitations:
+### Limitations
 
-- Automatic detection is rule-based and may produce false positives or miss sensitive information.
+RedactProof is an experimental prototype developed for SafeSpace Hacks 2026.
+- Automatic detection may produce false positives or miss sensitive information.
 - Phone number detection supports limited formats.
-- Redaction is based on PDF text search and selected rectangular regions.
-- Overlapping content may be affected by redaction.
-- Verification only checks whether selected text remains searchable in exported PDF page text.
-- Scanned documents and text embedded in images are not fully supported.
-- Metadata, annotations, form fields, attachments, and other PDF structures may contain information that is not fully inspected or removed.
-- Some PDF formats and layouts may require additional validation.
-- Users must review exported documents before sharing them.
-
-**A passed text verification is not a guarantee that a document contains no sensitive information.**
-
-Use fictional or synthetic documents for testing. Do not use the prototype as the sole protection for confidential information.
+- Verification checks selected searchable page text, not the complete contents of a PDF.
+- Images, metadata, annotations, forms, and attachments may still contain sensitive information.
+- Scanned documents are not fully supported.
+- Redaction may affect nearby or overlapping content.
+- Users should manually review exported documents.
+RedactProof does not guarantee complete removal of all sensitive information.
+Use fictional or synthetic data for testing.
 
 ## Development & Credits
 
@@ -149,7 +158,7 @@ RedactProof was developed for **SafeSpace Hacks 2026**.
 
 Development includes Python implementation, PDF processing, automated testing, and iterative improvements to verification and user experience.
 
-AI assistance from ChatGPT was used during development for code scaffolding, debugging guidance, and documentation. The implementation was adapted and tested as part of the project development process.
+AI assistance from ChatGPT was used during development for code scaffolding, debugging guidance, and documentation. 
 
 Third-party tools and libraries include Streamlit, PyMuPDF, and pytest.
 

@@ -17,7 +17,6 @@ st.title("RedactProof")
 st.write("Remove sensitive text from your PDFs and verify the result.")
 st.caption("Prototype: selectable page text only. Use fictional files for testing.")
 
-
 # Part 1: Generate a fictional PDF
 def make_demo_pdf():
     with pymupdf.open() as doc:
